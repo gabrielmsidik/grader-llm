@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grader LLM API Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .endpoint {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .method {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            background-color: #34c759;
+            color: white;
+        }
+        .url {
+            font-family: monospace;
+            background-color: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: inherit;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #response {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 5px;
+            display: none;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: #f0f0f0;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            color: #666;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .tab:hover {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .tab.active {
+            background: #007aff;
+            color: white;
+        }
+        .tab.active:hover {
+            background: #0056b3;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Grader LLM API Documentation</h1>
+    
+    <div class="endpoint">
+        <h2><span class="method">POST</span> <span class="url">/grade</span></h2>
+        <p>Grades a student's answer based on the provided question and actual answer.</p>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('documentation')">Documentation</button>
+            <button class="tab" onclick="switchTab('try-it')">Try It</button>
+        </div>
+
+        <div id="documentation" class="tab-content active">
+            <h3>Request Body:</h3>
+            <pre>{
+    "question": "string",
+    "actual_answer": "string",
+    "student_answer": "string",
+    "documents": ["string"]
+}</pre>
+
+            <h3>Response:</h3>
+            <pre>{
+    "score": "float (0-2)",
+    "feedback": "string",
+    "reason_code": "enum (CORRECT, SOURCE_CORRECT, HALLUCINATION, INVALID_INPUT, IDK)"
+}</pre>
+
+            <h3>Example:</h3>
+            <pre>curl -X POST http://localhost:5000/grade \
+-H "Content-Type: application/json" \
+-d '{
+    "question": "What is the capital of France?",
+    "actual_answer": "Paris",
+    "student_answer": "Paris",
+    "documents": ["France is a country in Europe.", "Paris is the capital of France."]
+}'</pre>
+        </div>
+
+        <div id="try-it" class="tab-content">
+            <form id="gradeForm" onsubmit="submitForm(event)">
+                <div class="form-group">
+                    <label for="question">Question:</label>
+                    <input type="text" id="question" required>
+                    <div class="error" id="questionError">Question is required</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="actualAnswer">Actual Answer:</label>
+                    <input type="text" id="actualAnswer" required>
+                    <div class="error" id="actualAnswerError">Actual answer is required</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentAnswer">Student Answer:</label>
+                    <input type="text" id="studentAnswer" required>
+                    <div class="error" id="studentAnswerError">Student answer is required</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="documents">Documents (one per line):</label>
+                    <textarea id="documents" rows="4"></textarea>
+                </div>
+
+                <button type="submit">Submit</button>
+            </form>
+
+            <pre id="response"></pre>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Deactivate all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content and activate tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function submitForm(event) {
+            event.preventDefault();
+            
+            // Reset errors
+            document.querySelectorAll('.error').forEach(error => {
+                error.style.display = 'none';
+            });
+
+            // Get form values
+            const question = document.getElementById('question').value;
+            const actualAnswer = document.getElementById('actualAnswer').value;
+            const studentAnswer = document.getElementById('studentAnswer').value;
+            const documents = document.getElementById('documents').value
+                .split('\n')
+                .filter(doc => doc.trim() !== '');
+
+            // Validate required fields
+            let hasError = false;
+            if (!question) {
+                document.getElementById('questionError').style.display = 'block';
+                hasError = true;
+            }
+            if (!actualAnswer) {
+                document.getElementById('actualAnswerError').style.display = 'block';
+                hasError = true;
+            }
+            if (!studentAnswer) {
+                document.getElementById('studentAnswerError').style.display = 'block';
+                hasError = true;
+            }
+
+            if (hasError) return;
+
+            const response = document.getElementById('response');
+            response.style.display = 'block';
+            response.textContent = 'Loading...';
+
+            try {
+                const result = await fetch('/grade', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question,
+                        actual_answer: actualAnswer,
+                        student_answer: studentAnswer,
+                        documents,
+                    }),
+                });
+
+                const data = await result.json();
+                response.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                response.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
