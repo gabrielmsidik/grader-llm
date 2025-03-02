@@ -109,12 +109,19 @@ def critique_answer(qa_response: QuestionAnswerResponse) -> Critique:
 
     print('formatted chat_message: ', chat_message)
 
-    response: ChatResponse = chat(model='deepseek-r1', messages=[
-    {
-        'role': 'user',
-        'content': chat_message,
-    },
-    ])
+    response: ChatResponse = chat(
+        model='deepseek-r1:1.5b', 
+        messages=[
+            {
+                'role': 'user',
+                'content': chat_message,
+            },
+        ],
+        options={
+            'temperature': 0,
+            'max_tokens': 200
+        }
+    )
 
     print(response.message.content)
     # TODO: Deepseek model is taking very long to think - need to toggle with parameters to reduce the time it takes
