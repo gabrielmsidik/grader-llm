@@ -117,6 +117,7 @@ def critique_answer(qa_response: QuestionAnswerResponse) -> Critique:
     ])
 
     print(response.message.content)
+    # TODO: Deepseek model is taking very long to think - need to toggle with parameters to reduce the time it takes
     ollama_resp = response.message.content
 
     return get_critique_from_llm_response(ollama_resp, qa_response)
