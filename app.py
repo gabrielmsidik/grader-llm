@@ -2,8 +2,11 @@ from flask import Flask, request, jsonify, render_template
 from models.request import QuestionAnswerResponse
 from models.response import Critique
 from models.enums import ReasonCode
+from lettucedetect.models.inference import HallucinationDetector
 from ollama import chat
 from ollama import ChatResponse
+import timeit
+
 import json
 import re
 
@@ -41,7 +44,6 @@ def get_critique_from_llm_response(ollama_resp: str, qa_response: QuestionAnswer
     
     if extracted_json:
         critique = Critique(
-            score=extracted_json.get("grade", -1),
             feedback=extracted_json.get("Feedback", "Parsing error for Feedback."),
             reason_code=extracted_json.get("reasonCode", ReasonCode.INVALID_INPUT)
         )
@@ -52,7 +54,6 @@ def get_critique_from_llm_response(ollama_resp: str, qa_response: QuestionAnswer
 def fall_back_critique(qa_response: QuestionAnswerResponse) -> Critique:
     
     critique = Critique(
-        score=0.0,
         feedback="Invalid input.",
         reason_code=ReasonCode.INVALID_INPUT
     )
@@ -66,25 +67,44 @@ def fall_back_critique(qa_response: QuestionAnswerResponse) -> Critique:
     # Simple grading logic (you can enhance this)
     if qa_response.student_answer.lower() == qa_response.actual_answer.lower():
         critique = Critique(
-            score=2.0,
             feedback="Perfect answer!",
             reason_code=ReasonCode.CORRECT
         )
     elif qa_response.student_answer.lower() in qa_response.actual_answer.lower():
         critique = Critique(
-            score=1.0,
             feedback="Partially correct answer. Your response contains some correct elements but is incomplete.",
             reason_code=ReasonCode.SOURCE_CORRECT
         )
     else:
         critique = Critique(
-            score=0.0,
             feedback="Incorrect answer. Please review the material and try again.",
             reason_code=ReasonCode.HALLUCINATION
         )
 
     print("Returning fallback critque: ", critique)
     return critique
+
+def lettuce_critique_answer(qa_response: QuestionAnswerResponse) -> Critique:
+
+    HALLUCINATION_THRESHOLD = 0.7
+    detector = HallucinationDetector(
+        method="transformer", model_path="KRLabsOrg/lettucedect-base-modernbert-en-v1"
+    )
+    predictions = detector.predict(context=qa_response.documents, question=qa_response.question, answer=qa_response.student_answer, output_format="spans")
+    max_hallucination = -1
+    for prediction in predictions:
+        if prediction["confidence"] > max_hallucination:
+            max_hallucination = prediction["confidence"]
+    
+    if (max_hallucination > HALLUCINATION_THRESHOLD):
+        return Critique(
+            feedback="Hallucination confidence above threshold of %s" % HALLUCINATION_THRESHOLD,
+            reason_code=ReasonCode.HALLUCINATION
+        )
+    return Critique(
+        feedback="No hallucination detected",
+        reason_code=ReasonCode.CORRECT
+    )
 
 def critique_answer(qa_response: QuestionAnswerResponse) -> Critique:
 
@@ -99,15 +119,11 @@ def critique_answer(qa_response: QuestionAnswerResponse) -> Critique:
     Please respond in a JSON format - example below:
 
     {
-        "grade": 2,
         "reasonCode": "CORRECT",
-        "Feedback": "Answer is exactly correct"
-    }0 is totally wrong
+        "feedback": "Answer is exactly correct"
+    }
     reasonCode can either be "CORRECT" - for correct answer, "HALLUCINATION" - for hallucination, "IDK" - when the student admits that she does not know the answer, and "SOURCE_CORRECT" - when the documents the student retrieved contains some correct information but a wrong answer is generated. 
-    Grade can be a number between 2 and 0, where 2 is for reasonCode CORRECT, 0 is for reasonCode HALLUCINATION, and 1 is for reasonCode IDK and SOURCE_CORRECT
     '''  % (qa_response.question, qa_response.student_answer, qa_response.actual_answer, qa_response.documents)
-
-    print('formatted chat_message: ', chat_message)
 
     response: ChatResponse = chat(
         model='deepseek-r1:1.5b', 
@@ -123,9 +139,8 @@ def critique_answer(qa_response: QuestionAnswerResponse) -> Critique:
         }
     )
 
-    print(response.message.content)
-    # TODO: Deepseek model is taking very long to think - need to toggle with parameters to reduce the time it takes
-    ollama_resp = response.message.content
+    # The ollama response is now directly a dictionary, not an object with message attribute
+    ollama_resp = response['message']['content']
 
     return get_critique_from_llm_response(ollama_resp, qa_response)
 
@@ -138,17 +153,14 @@ def grade():
     try:
         # Parse and validate input
         data = request.get_json()
-        print(data)
         qa_response = QuestionAnswerResponse(**data)
-        print(qa_response)
 
-        critique = critique_answer(qa_response)
-        print(critique)
-        return jsonify(critique.model_dump())
+        # critique = critique_answer(qa_response)
+        lettuce_critique = lettuce_critique_answer(qa_response)
+        return jsonify(lettuce_critique.model_dump())
     
     except Exception as e:
         return jsonify({
-            "score": 0.0,
             "feedback": f"Error processing request: {str(e)}",
             "reason_code": ReasonCode.INVALID_INPUT
         }), 400
