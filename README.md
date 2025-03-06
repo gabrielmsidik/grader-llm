@@ -8,3 +8,5 @@ LLM judge that compares and grades questions and answers
 4. python app.py
 
 Note that for ollama integration - ollama needs to be running locally 
+
+for mac: source .my_venv/bin/activate
